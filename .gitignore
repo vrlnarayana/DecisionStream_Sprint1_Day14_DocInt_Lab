@@ -1,0 +1,14 @@
+# Live credentials. The root .gitignore covers this too; belt and braces,
+# because this one travels with the lab when it is zipped for a cohort.
+.env
+
+# Generated. Everything here is reproducible:
+#   python3 run_lab.py --make-pdfs     rebuilds docs/
+#   python3 run_lab.py --compare       rebuilds out/
+docs/
+out/
+
+__pycache__/
+*.pyc
+
+.DS_Store
