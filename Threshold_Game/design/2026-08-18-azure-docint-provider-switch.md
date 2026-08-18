@@ -1932,5 +1932,5 @@ Run before calling this done:
 .venv/bin/python verify.py                             # JS/Python parity
 ```
 
-Then, per `CLAUDE.md`: this is still a draft until it has been migrated to the
-Techademy-provided Azure VM and tested there. "Works in `.venv`" is not done.
+Then: this is still a draft until it has been migrated to the delivery VM the
+cohort actually uses and tested there. "Works in `.venv`" is not done.

@@ -12,3 +12,6 @@ __pycache__/
 *.pyc
 
 .DS_Store
+
+# Local authoring venv for Threshold_Game (see Threshold_Game/README.md)
+.venv/

@@ -310,6 +310,7 @@ stdlib-only guarantee; only the azure path needs it.
 
 ## 8. Delivery note
 
-Per the project convention in `CLAUDE.md`: anything built here in the local `.venv`
-is a draft. This lab must be migrated to the Techademy-provided Azure VM and tested
-there before it counts as done.
+Anything built in the local `.venv` is a draft. This lab must be migrated to the
+delivery VM the cohort actually uses, and tested there, before it counts as done —
+"works on my laptop" is not done for teaching material that fifteen people will run
+simultaneously on someone else's machine.
