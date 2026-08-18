@@ -1,0 +1,8 @@
+# The terminal version (play.py) and the HTML version need NOTHING.
+# Standard library only. These are for the Streamlit board alone.
+streamlit>=1.30
+
+# Only the azure provider needs this — it renders the ten documents to
+# deliberately degraded PDFs so the live service reports real uncertainty.
+# render.py imports it lazily, so the mock game still runs without it.
+Pillow>=10.0

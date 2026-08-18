@@ -1,0 +1,36 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Threshold Game — watch",
+      "type": "shell",
+      "command": "python3 play.py --watch",
+      "problemMatcher": [],
+      "isBackground": true,
+      "group": { "kind": "build", "isDefault": true },
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true }
+    },
+    {
+      "label": "Threshold Game — score once",
+      "type": "shell",
+      "command": "python3 play.py",
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true }
+    },
+    {
+      "label": "Threshold Game — strategy comparison",
+      "type": "shell",
+      "command": "python3 play.py --compare",
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true }
+    },
+    {
+      "label": "Threshold Game — Streamlit board",
+      "type": "shell",
+      "command": "streamlit run app.py",
+      "problemMatcher": [],
+      "isBackground": true,
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    }
+  ]
+}

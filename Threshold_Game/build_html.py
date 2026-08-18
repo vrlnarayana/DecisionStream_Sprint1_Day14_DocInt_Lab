@@ -1,0 +1,536 @@
+"""
+build_html.py — generate a single self-contained HTML file.
+
+    python3 build_html.py
+
+Produces threshold_game.html. Double-click it. No install, no server, no
+Python needed on the machine that opens it.
+
+WHY BOTH THIS AND STREAMLIT
+---------------------------
+Streamlit is the nicer board, and it needs pip install. In a room where four
+people have a locked-down laptop, the nicer board is the one that does not
+run. This one opens from a USB stick.
+
+THE RISK, AND WHAT IS DONE ABOUT IT
+------------------------------------
+The scoring below is reimplemented in JavaScript. Two implementations of the
+same rules will drift unless something stops them, so `verify.py` runs both
+across a set of strategies and fails loudly if any score differs.
+
+The document data is emitted from game.py rather than retyped, so at least
+the corpus is single-sourced.
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE / "threshold_game"))
+
+from game import (DOCUMENTS, FIELDS, FIELD_KIND, PATTERNS, REQUIRED,   # noqa: E402
+                  CHECKS, POINTS, DEFAULT_THRESHOLDS, FORBIDDEN_PREFIXES,
+                  strategy, play)
+
+TUNING_CEILING = 252
+GLOBAL_BEST = 720
+
+
+def strategy_table() -> list[dict]:
+    names = ["brief", "accept_everything", "flag_everything", "tuned_hard",
+             "tuned_extreme", "checks_only", "checks_and_tuning"]
+    labels = {
+        "brief": "The brief: 0.85 everywhere, no checks",
+        "accept_everything": "Accept everything",
+        "flag_everything": "Flag everything",
+        "tuned_hard": "Tuned hard, no checks",
+        "tuned_extreme": "Everything at 0.99, no checks",
+        "checks_only": "All checks on, thresholds left at 0.85",
+        "checks_and_tuning": "All checks on, plus tight thresholds",
+    }
+    out = []
+    for n in names:
+        t, c = strategy(n)
+        r = play(t, c)["total"]
+        out.append({"label": labels[n], "score": r["score"],
+                    "correct": r["correct_accepts"], "wrong": r["wrong_accepts"],
+                    "flags": r["flags"]})
+    return out
+
+
+DATA = {
+    "documents": DOCUMENTS,
+    "fields": FIELDS,
+    "fieldKind": FIELD_KIND,
+    "patterns": PATTERNS,
+    "required": REQUIRED,
+    "checks": CHECKS,
+    "points": POINTS,
+    "defaults": DEFAULT_THRESHOLDS,
+    "forbidden": list(FORBIDDEN_PREFIXES),
+    "strategies": strategy_table(),
+    "tuningCeiling": TUNING_CEILING,
+    "globalBest": GLOBAL_BEST,
+}
+
+HTML = r"""<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>The Threshold Game — DecisionStream AI</title>
+<style>
+:root{--ind:#2E0C69;--indDk:#1C0742;--org:#FD600E;--lav:#DCD4FF;--pur:#8955FD;
+      --ink:#1A1030;--slate:#5B5470;--muted:#857DA0;--bg:#F7F5FF;--bd:#E2DBF7;
+      --ok:#1B7F5A;--okbg:#E2F3EC;--bad:#C0223B;--badbg:#FBE4E8;--flagbg:#FFF4E5;--flagtx:#7A2E00;}
+*{box-sizing:border-box}
+body{margin:0;font-family:Calibri,Segoe UI,system-ui,sans-serif;color:var(--ink);background:var(--bg)}
+header{background:var(--ind);color:#fff;padding:18px 26px}
+header h1{margin:0;font-family:Cambria,Georgia,serif;font-size:26px}
+header p{margin:6px 0 0;color:var(--lav);font-size:13.5px;max-width:900px}
+.wrap{display:grid;grid-template-columns:330px 1fr;gap:20px;padding:20px 26px 40px}
+.panel{background:#fff;border:1px solid var(--bd);border-radius:10px;padding:16px}
+.panel h2{margin:0 0 4px;font-family:Cambria,Georgia,serif;font-size:17px;color:var(--ind)}
+.panel .cap{color:var(--muted);font-size:12px;margin:0 0 12px;line-height:1.4}
+.sl{margin-bottom:9px}
+.sl label{display:flex;justify-content:space-between;font-size:12px;margin-bottom:2px}
+.sl .fn{font-weight:600}
+.sl .kind{color:var(--muted);font-size:10.5px}
+.sl .val{font-family:Courier New,monospace;font-weight:700;color:var(--ind)}
+input[type=range]{width:100%;accent-color:var(--pur);height:16px}
+.ck{display:flex;gap:8px;align-items:flex-start;margin-bottom:9px;font-size:12.5px}
+.ck input{margin-top:2px;accent-color:var(--org);width:15px;height:15px}
+.ck .d{color:var(--muted);font-size:11px;line-height:1.35}
+button{font-family:inherit;font-size:12.5px;padding:7px 12px;border-radius:7px;
+       border:1px solid var(--bd);background:#fff;color:var(--ind);cursor:pointer;font-weight:600}
+button:hover{background:var(--lav)}
+button.p{background:var(--ind);color:#fff;border-color:var(--ind)}
+button.p:hover{background:var(--indDk)}
+.btnrow{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:12px}
+.score{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+.big{font-size:52px;font-weight:700;line-height:1;font-family:Cambria,Georgia,serif}
+.m{background:#fff;border:1px solid var(--bd);border-radius:9px;padding:9px 14px;min-width:96px}
+.m .l{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+.m .v{font-size:22px;font-weight:700;font-family:Cambria,Georgia,serif}
+.banner{padding:11px 15px;border-radius:9px;font-size:13px;margin-bottom:14px;line-height:1.5}
+.b-ok{background:var(--okbg);color:#10503A}
+.b-bad{background:var(--badbg);color:#78122A}
+.b-in{background:var(--lav);color:var(--ind)}
+.tabs{display:flex;gap:5px;margin-bottom:12px;flex-wrap:wrap}
+.tab{padding:7px 13px;border-radius:7px 7px 0 0;background:#fff;border:1px solid var(--bd);
+     border-bottom:none;cursor:pointer;font-size:12.5px;font-weight:600;color:var(--slate)}
+.tab.on{background:var(--ind);color:#fff;border-color:var(--ind)}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(178px,1fr));gap:11px}
+.card{background:#fff;border:1px solid var(--bd);border-radius:9px;padding:11px;cursor:pointer}
+.card:hover{border-color:var(--pur)}
+.card.sel{border-color:var(--org);border-width:2px}
+.card .id{font-family:Courier New,monospace;font-weight:700;font-size:12.5px;color:var(--ind)}
+.card .s{font-size:26px;font-weight:700;font-family:Cambria,Georgia,serif;line-height:1.1}
+.card .n{font-size:11px;color:var(--muted);line-height:1.35;margin-top:5px}
+.pill{display:inline-block;padding:1px 8px;border-radius:11px;font-size:10.5px;font-weight:700;margin:3px 4px 0 0}
+.p-ok{background:var(--okbg);color:#10503A}.p-bad{background:var(--badbg);color:#78122A}
+.p-fl{background:var(--flagbg);color:var(--flagtx)}
+table{width:100%;border-collapse:collapse;font-size:12px;background:#fff}
+th{background:var(--ind);color:#fff;text-align:left;padding:7px 9px;font-weight:600;font-size:11.5px}
+td{padding:6px 9px;border-bottom:1px solid var(--bd);vertical-align:top}
+tr:nth-child(even) td{background:var(--bg)}
+td.mono{font-family:Courier New,monospace;font-size:11.5px}
+.v-accept{color:var(--ok);font-weight:700}.v-flag{color:var(--flagtx);font-weight:700}
+.pts-pos{color:var(--ok);font-weight:700}.pts-neg{color:var(--bad);font-weight:700}
+.hint{background:var(--flagbg);color:var(--flagtx);padding:9px 12px;border-radius:8px;
+      font-size:12px;margin-top:10px;line-height:1.5}
+.prose{background:#fff;border:1px solid var(--bd);border-radius:10px;padding:18px;font-size:13.5px;line-height:1.62}
+.prose h3{font-family:Cambria,Georgia,serif;color:var(--ind);margin:0 0 10px}
+.prose blockquote{border-left:3px solid var(--org);margin:14px 0;padding:2px 0 2px 14px;color:var(--slate)}
+.you td{background:var(--lav)!important;font-weight:700}
+@media(max-width:1000px){.wrap{grid-template-columns:1fr}}
+</style></head><body>
+
+<header>
+  <h1>🎯 The Threshold Game</h1>
+  <p>Ten case application forms, as Document Intelligence returned them. Decide what to accept
+     automatically and what to send to a human. A flag costs half a minute. A wrongly accepted
+     value costs a case.</p>
+</header>
+
+<div class="wrap">
+  <div>
+    <div class="panel" style="margin-bottom:16px">
+      <h2>Presets</h2>
+      <p class="cap">Start from the brief and see what it lets through.</p>
+      <div class="btnrow">
+        <button class="p" onclick="preset('brief')">The brief</button>
+        <button onclick="preset('accept')">Accept all</button>
+        <button onclick="preset('flag')">Flag all</button>
+        <button onclick="downloadPolicy()">Download policy.json</button>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-bottom:16px">
+      <h2>Confidence thresholds</h2>
+      <p class="cap">Above the bar, accept automatically. Below it, send to a human.</p>
+      <div id="sliders"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Checks</h2>
+      <p class="cap">A check can override a high confidence when the value does not look like
+         what it claims to be.</p>
+      <div id="checks"></div>
+    </div>
+  </div>
+
+  <div>
+    <div class="score" id="score"></div>
+    <div id="banner"></div>
+    <div class="tabs">
+      <div class="tab on" data-t="docs" onclick="tab('docs')">Per document</div>
+      <div class="tab" data-t="detail" onclick="tab('detail')">Field detail</div>
+      <div class="tab" data-t="scoring" onclick="tab('scoring')">How scoring works</div>
+      <div class="tab" data-t="strat" onclick="tab('strat')">Strategy comparison</div>
+    </div>
+    <div id="body"></div>
+  </div>
+</div>
+
+<script>
+const DATA = __DATA__;
+let TH = Object.assign({}, DATA.defaults);
+let CK = {}; Object.keys(DATA.checks).forEach(k => CK[k] = false);
+let TAB = "docs", SEL = DATA.documents[0].id, BEST = null;
+
+/* ===================== scoring — mirrors game.py ===================== */
+const OCR = {O:"0", o:"0", I:"1", l:"1", B:"8", S:"5"};
+function ocrFix(s){ return s.split("").map(c => OCR[c] || c).join(""); }
+
+function normMoney(raw){
+  let s = String(raw).trim(), notes = [];
+  if (/[OoIl]/.test(s)) { notes.push("ocr_letter_in_number");
+    s = s.replace(/O/g,"0").replace(/o/g,"0").replace(/I/g,"1").replace(/l/g,"1"); }
+  s = s.replace(/[^0-9.]/g,"");
+  const v = parseFloat(s);
+  return isNaN(v) ? [null, notes.concat("unparseable")] : [v, notes];
+}
+function isoOk(y,m,d){ const dt = new Date(Date.UTC(y,m-1,d));
+  return dt.getUTCFullYear()===y && dt.getUTCMonth()===m-1 && dt.getUTCDate()===d; }
+function pad(n){ return String(n).padStart(2,"0"); }
+function normDate(raw, strict){
+  let s = String(raw).trim(), notes = [];
+  if (/[OoIl]/.test(s)) { notes.push("ocr_letter_in_number");
+    s = s.replace(/O/g,"0").replace(/o/g,"0").replace(/I/g,"1").replace(/l/g,"1"); }
+  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (m) { const y=+m[1],mo=+m[2],d=+m[3];
+    return isoOk(y,mo,d) ? [s,notes] : [null, notes.concat("impossible_date")]; }
+  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m) { const a=+m[1],b=+m[2],y=+m[3];
+    if (a<=12 && b<=12 && a!==b) {
+      if (strict) return [null, notes.concat("ambiguous_date")];
+      return isoOk(y,b,a) ? [`${y}-${pad(b)}-${pad(a)}`, notes.concat("ambiguous_date_guessed")]
+                          : [null, notes.concat("impossible_date")];
+    }
+    const d = a>12 ? a : b, mo = a>12 ? b : a;
+    return isoOk(y,mo,d) ? [`${y}-${pad(mo)}-${pad(d)}`, notes]
+                         : [null, notes.concat("impossible_date")]; }
+  return [null, notes.concat("unrecognised_date")];
+}
+function normId(raw, fname){
+  const s = String(raw).trim().toUpperCase(), pat = DATA.patterns[fname];
+  if (pat && !(new RegExp(pat).test(s))) {
+    const rep = ocrFix(s);
+    if (new RegExp(pat).test(rep)) return [rep, ["ocr_repaired_to_pattern"]];
+    return [s, ["pattern_mismatch"]];
+  }
+  return [s, []];
+}
+
+function process(doc){
+  const fields = {}, dropped = [], extras = {};
+  for (const kv of doc.kv) {
+    const fn = kv.field;
+    if (DATA.forbidden.some(p => fn.startsWith(p))) {
+      if (CK.scope_gate) { dropped.push({field:fn, page:kv.page}); continue; }
+      fields[fn] = {name:fn, raw:String(kv.value), value:String(kv.value),
+                    confidence:kv.confidence, page:kv.page, verdict:"accept",
+                    notes:["identity_data_in_profile"]};
+      continue;
+    }
+    if (fn === "parts_subtotal" || fn === "labour_subtotal") {
+      const [v] = normMoney(kv.value); if (v !== null) extras[fn] = v; continue;
+    }
+    if (!DATA.fields.includes(fn)) continue;
+
+    const kind = DATA.fieldKind[fn];
+    let val, notes;
+    if (kind === "money") [val, notes] = normMoney(kv.value);
+    else if (kind === "date") [val, notes] = normDate(kv.value, !!CK.date_sanity);
+    else if (kind === "identifier") [val, notes] = normId(kv.value, fn);
+    else { val = String(kv.value).trim(); notes = []; }
+
+    let verdict = kv.confidence >= (TH[fn] ?? 0.85) ? "accept" : "flag";
+    if (CK.pattern && notes.includes("pattern_mismatch")) verdict = "flag";
+    if (CK.ocr_repair && notes.includes("ocr_repaired_to_pattern")) verdict = "flag";
+    if (CK.date_sanity && notes.some(n => ["ambiguous_date","impossible_date","unrecognised_date"].includes(n))) verdict = "flag";
+    if (val === null && verdict === "accept") { verdict = "flag"; notes = notes.concat("unparseable_value"); }
+
+    if (fields[fn]) {
+      const prev = fields[fn];
+      if (prev.value !== val) {
+        if (CK.conflict) { prev.verdict = "flag"; prev.value = "CONFLICT";
+          prev.notes = prev.notes.concat("conflicting_values"); continue; }
+        notes = notes.concat("silently_overwrote_earlier_value");
+      }
+    }
+    fields[fn] = {name:fn, raw:String(kv.value), value:val, confidence:kv.confidence,
+                  page:kv.page, verdict:verdict, notes:notes};
+  }
+
+  const V = n => fields[n] ? fields[n].value : null;
+  if (CK.arithmetic && extras.parts_subtotal != null && extras.labour_subtotal != null
+      && typeof V("repair_estimate_total") === "number") {
+    if (Math.abs(extras.parts_subtotal + extras.labour_subtotal - V("repair_estimate_total")) > 0.01) {
+      const f = fields.repair_estimate_total;
+      f.verdict = "flag"; f.value = "CONFLICT"; f.notes = f.notes.concat("arithmetic_mismatch");
+    }
+  }
+  if (CK.cross_field) {
+    const est = V("repair_estimate_total"), sins = V("sum_insured"), exc = V("excess");
+    if (typeof est === "number" && typeof sins === "number" && est > sins * 1.5) {
+      const f = fields.repair_estimate_total;
+      f.verdict = "flag"; f.value = "CONFLICT";
+      f.notes = f.notes.concat("estimate_far_exceeds_sum_insured");
+    }
+    if (typeof exc === "number" && typeof est === "number" && exc > est) {
+      fields.excess.verdict = "flag";
+      fields.excess.notes = fields.excess.notes.concat("excess_exceeds_estimate");
+    }
+    const dob = V("date_of_birth"), inc = V("incident_date");
+    if (typeof dob === "string" && typeof inc === "string"
+        && /^\d{4}-\d{2}-\d{2}$/.test(dob) && /^\d{4}-\d{2}-\d{2}$/.test(inc)) {
+      const age = (new Date(inc) - new Date(dob)) / 86400000 / 365.25;
+      if (age < 17) { fields.date_of_birth.verdict = "flag";
+        fields.date_of_birth.notes = fields.date_of_birth.notes.concat("implausible_age"); }
+    }
+  }
+  const missing = DATA.required.filter(f => !(f in fields));
+  return {fields, missing, dropped};
+}
+
+function scoreDoc(res, doc){
+  const P = DATA.points, truth = doc.truth;
+  let total = 0, ok = 0, wrong = 0, flags = 0; const detail = [];
+  for (const name of Object.keys(res.fields)) {
+    const f = res.fields[name];
+    if (f.notes.includes("identity_data_in_profile")) {
+      total += P.wrong_accept; wrong++;
+      detail.push({field:name, verdict:"accept", ok:false, points:P.wrong_accept,
+                   why:"identity data in the profile"});
+      continue;
+    }
+    if (f.verdict === "flag") {
+      total += P.flag; flags++;
+      detail.push({field:name, verdict:"flag", ok:null, points:P.flag,
+                   why:(f.notes.join(", ") || "below threshold")});
+      continue;
+    }
+    const want = truth[name];
+    let good, why;
+    if (["CONFLICT","ARITHMETIC_MISMATCH","AMBIGUOUS","IMPLAUSIBLE"].includes(want)) {
+      good = false; why = "should not have been accepted (" + want + ")";
+    } else if (want === undefined || want === null) {
+      good = false; why = "field is not in the form at all";
+    } else if (typeof want === "number") {
+      good = (typeof f.value === "number") && Math.abs(f.value - want) < 0.01;
+      why = good ? "correct" : `accepted ${f.value}, should be ${want}`;
+    } else {
+      good = String(f.value) === String(want);
+      why = good ? "correct" : `accepted ${f.value}, should be ${want}`;
+    }
+    const pts = good ? P.correct_accept : P.wrong_accept;
+    total += pts; good ? ok++ : wrong++;
+    detail.push({field:name, verdict:"accept", ok:good, points:pts, why:why});
+  }
+  total += res.missing.length * P.missing_unflagged;
+  return {doc_id:doc.id, score:total, correct_accepts:ok, wrong_accepts:wrong,
+          flags:flags, missing:res.missing.length, detail:detail};
+}
+
+function playAll(){
+  const rows = [], per = {};
+  const tot = {score:0, correct_accepts:0, wrong_accepts:0, flags:0, missing:0};
+  for (const doc of DATA.documents) {
+    const res = process(doc), sc = scoreDoc(res, doc);
+    rows.push(sc); per[doc.id] = {result:res, score:sc};
+    for (const k in tot) tot[k] += sc[k];
+  }
+  return {total:tot, per_doc:per, rows:rows};
+}
+
+/* ===================== UI ===================== */
+function buildControls(){
+  document.getElementById("sliders").innerHTML = DATA.fields.map(f => `
+    <div class="sl">
+      <label><span><span class="fn">${f}</span> <span class="kind">${DATA.fieldKind[f]}</span></span>
+             <span class="val" id="v_${f}">${TH[f].toFixed(2)}</span></label>
+      <input type="range" min="0" max="1" step="0.01" value="${TH[f]}"
+             oninput="setTh('${f}', this.value)">
+    </div>`).join("");
+  document.getElementById("checks").innerHTML = Object.keys(DATA.checks).map(k => `
+    <div class="ck">
+      <input type="checkbox" id="ck_${k}" ${CK[k] ? "checked" : ""} onchange="setCk('${k}', this.checked)">
+      <div><label for="ck_${k}"><b>${k}</b></label>
+           <div class="d">${DATA.checks[k]}</div></div>
+    </div>`).join("");
+}
+function setTh(f, v){ TH[f] = parseFloat(v); document.getElementById("v_"+f).textContent = TH[f].toFixed(2); render(); }
+function setCk(k, v){ CK[k] = v; render(); }
+function preset(name){
+  if (name === "brief") { DATA.fields.forEach(f => TH[f] = 0.85); Object.keys(CK).forEach(k => CK[k] = false); }
+  if (name === "accept") { DATA.fields.forEach(f => TH[f] = 0.0); }
+  if (name === "flag") { DATA.fields.forEach(f => TH[f] = 1.0); }
+  buildControls(); render();
+}
+function downloadPolicy(){
+  const blob = new Blob([JSON.stringify({thresholds:TH, checks:CK}, null, 2)],
+                        {type:"application/json"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = "policy.json"; a.click();
+}
+function tab(t){ TAB = t;
+  document.querySelectorAll(".tab").forEach(e => e.classList.toggle("on", e.dataset.t === t));
+  render(); }
+
+function render(){
+  const r = playAll(), t = r.total;
+  if (BEST === null || t.score > BEST) BEST = t.score;
+  const col = t.score > 0 ? "var(--ok)" : "var(--bad)";
+  const P = DATA.points;
+  document.getElementById("score").innerHTML = `
+    <div><div class="big" style="color:${col}">${t.score}</div>
+      <div style="font-size:11.5px;color:var(--muted)">score · best this session ${BEST}</div></div>
+    <div class="m"><div class="l">Correct accepts</div><div class="v" style="color:var(--ok)">${t.correct_accepts}</div></div>
+    <div class="m"><div class="l">WRONG accepts</div><div class="v" style="color:${t.wrong_accepts?"var(--bad)":"var(--ok)"}">${t.wrong_accepts}</div></div>
+    <div class="m"><div class="l">Flagged</div><div class="v" style="color:var(--flagtx)">${t.flags}</div></div>
+    <div class="m"><div class="l">Missing</div><div class="v">${t.missing}</div></div>`;
+
+  let b = "";
+  if (t.wrong_accepts === 0 && t.score > DATA.tuningCeiling)
+    b = `<div class="banner b-ok"><b>Zero wrong accepts, and past ${DATA.tuningCeiling}</b> — which is
+         the ceiling for threshold tuning with every check switched off, found by a four-thousand-trial
+         search. Best known score is ${DATA.globalBest}.</div>`;
+  else if (t.wrong_accepts === 0)
+    b = `<div class="banner b-in"><b>Zero wrong accepts.</b> Now see how many flags you can give back.</div>`;
+  else
+    b = `<div class="banner b-bad"><b>${t.wrong_accepts} wrong value${t.wrong_accepts>1?"s":""} accepted.</b>
+         Each costs ${Math.abs(P.wrong_accept)} — more than seventy flags.</div>`;
+  document.getElementById("banner").innerHTML = b;
+
+  const body = document.getElementById("body");
+  if (TAB === "docs") {
+    body.innerHTML = `<div class="cards">` + r.rows.map(row => {
+      const doc = DATA.documents.find(d => d.id === row.doc_id);
+      const c = row.wrong_accepts === 0 ? "var(--ok)" : "var(--bad)";
+      let pills = "";
+      if (row.correct_accepts) pills += `<span class="pill p-ok">${row.correct_accepts} ok</span>`;
+      if (row.wrong_accepts) pills += `<span class="pill p-bad">${row.wrong_accepts} wrong</span>`;
+      if (row.flags) pills += `<span class="pill p-fl">${row.flags} flag</span>`;
+      return `<div class="card ${SEL===row.doc_id?"sel":""}" onclick="SEL='${row.doc_id}';tab('detail')">
+        <div class="id">${row.doc_id}</div>
+        <div class="s" style="color:${c}">${row.score}</div>
+        <div>${pills}</div><div class="n">${doc.note}</div></div>`;
+    }).join("") + `</div>
+    <div class="hint">Click any card to see every field, what was accepted, and why.</div>`;
+  }
+  else if (TAB === "detail") {
+    const doc = DATA.documents.find(d => d.id === SEL);
+    const row = r.rows.find(x => x.doc_id === SEL);
+    const fields = r.per_doc[SEL].result.fields;
+    const opts = DATA.documents.map(d =>
+      `<option value="${d.id}" ${d.id===SEL?"selected":""}>${d.id} — ${d.note}</option>`).join("");
+    let rows = row.detail.map(d => {
+      const f = fields[d.field];
+      return `<tr><td class="mono">${d.field}</td>
+        <td class="mono">${f?f.raw:""}</td>
+        <td class="mono">${f?f.value:""}</td>
+        <td class="mono">${f?f.confidence.toFixed(2):""}</td>
+        <td class="mono">${(TH[d.field]??0.85).toFixed(2)}</td>
+        <td class="v-${d.verdict}">${d.verdict}</td>
+        <td class="${d.points>0?"pts-pos":"pts-neg"}">${d.points>0?"+":""}${d.points}</td>
+        <td>${d.why}</td></tr>`;
+    }).join("");
+    let extra = "";
+    const miss = r.per_doc[SEL].result.missing;
+    if (miss.length) extra += `<div class="banner b-bad" style="margin-top:12px">
+      Required fields not present at all: <b>${miss.join(", ")}</b> (${DATA.points.missing_unflagged} each)</div>`;
+    const dr = r.per_doc[SEL].result.dropped;
+    if (dr.length) extra += `<div class="banner b-ok" style="margin-top:12px">
+      Dropped before reaching the profile: <b>${dr.map(x=>x.field).join(", ")}</b></div>`;
+    body.innerHTML = `
+      <div style="margin-bottom:11px"><select onchange="SEL=this.value;render()"
+        style="padding:7px;border-radius:7px;border:1px solid var(--bd);font-family:inherit;font-size:12.5px;width:100%">${opts}</select></div>
+      <div style="margin-bottom:9px;font-size:13.5px"><b>Score for this document: </b>
+        <span style="color:${row.wrong_accepts?"var(--bad)":"var(--ok)"};font-weight:700">${row.score}</span></div>
+      <table><tr><th>field</th><th>raw</th><th>parsed</th><th>conf</th><th>bar</th>
+             <th>verdict</th><th>pts</th><th>why</th></tr>${rows}</table>
+      ${extra}
+      <div class="hint"><b>Hint.</b> ${doc.hint}</div>`;
+  }
+  else if (TAB === "scoring") {
+    body.innerHTML = `<div class="prose">
+      <h3>How scoring works</h3>
+      <table style="margin-bottom:16px">
+        <tr><th>Outcome</th><th>Points</th><th>Why</th></tr>
+        <tr><td>A correct value accepted automatically</td><td class="pts-pos">+${P.correct_accept}</td><td>The work you saved</td></tr>
+        <tr><td><b>A wrong value accepted automatically</b></td><td class="pts-neg">${P.wrong_accept}</td><td>The case you broke</td></tr>
+        <tr><td>A value sent to a human</td><td class="pts-neg">${P.flag}</td><td>Thirty seconds of handler time</td></tr>
+        <tr><td>A required field missing and not flagged</td><td class="pts-neg">${P.missing_unflagged}</td><td>A silent gap</td></tr>
+      </table>
+      <p>The asymmetry is the point. A wrongly accepted policy number attaches a claim to a policy
+         that does not exist, and nobody finds out until somebody downstream notices. A flag costs
+         half a minute and somebody knows it happened.</p>
+      <blockquote>Confidence is the model's certainty about what it <b>saw</b>.<br>
+        It is not a statement about whether the value is <b>correct</b>.</blockquote>
+    </div>`;
+  }
+  else {
+    const rows = DATA.strategies.map(s => `<tr><td>${s.label}</td>
+      <td class="${s.score>0?"pts-pos":"pts-neg"}">${s.score}</td>
+      <td>${s.correct}</td><td class="${s.wrong?"pts-neg":""}">${s.wrong}</td><td>${s.flags}</td></tr>`).join("");
+    body.innerHTML = `<div class="prose">
+      <h3>Strategy comparison</h3>
+      <p style="color:var(--muted);font-size:12.5px">Every one of these was scored by the same
+         engine you are playing against.</p>
+      <table><tr><th>strategy</th><th>score</th><th>correct</th><th>WRONG</th><th>flags</th></tr>
+        ${rows}
+        <tr class="you"><td>— your settings —</td><td>${t.score}</td><td>${t.correct_accepts}</td>
+            <td>${t.wrong_accepts}</td><td>${t.flags}</td></tr></table>
+      <h3 style="margin-top:20px">The two findings hiding in that table</h3>
+      <p>A four-thousand-trial search over threshold combinations, with every check switched off,
+         tops out at <b>${DATA.tuningCeiling}</b> — and still lets two wrong values through.
+         Simply switching the checks on, leaving every threshold at the brief's 0.85, scores
+         <b>576</b>.</p>
+      <p>And note that <i>all checks on, plus tight thresholds</i> scores <b>less</b> than
+         <i>all checks on</i> alone. Tightening on top of working validation buys you flags and
+         prevents nothing.</p>
+      <blockquote>Tuning moves who looks at a value.<br>
+                  Validation changes whether the value is right.</blockquote>
+    </div>`;
+  }
+}
+
+buildControls(); render();
+</script></body></html>
+"""
+
+
+def main() -> int:
+    out = HERE / "threshold_game.html"
+    html = HTML.replace("__DATA__", json.dumps(DATA))
+    out.write_text(html, encoding="utf-8")
+    print(f"written: {out}  ({len(html)/1024:.0f} KB)")
+    print("Open it by double-clicking. No install, no server.")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
