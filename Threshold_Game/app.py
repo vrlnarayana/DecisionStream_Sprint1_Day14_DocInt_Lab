@@ -23,6 +23,30 @@ from game import (DOCUMENTS, FIELDS, FIELD_KIND, CHECKS, POINTS,   # noqa: E402
                   DEFAULT_THRESHOLDS, DEFAULT_CHECKS, play, strategy)
 import docint                                              # noqa: E402
 import providers                                           # noqa: E402
+import render                                              # noqa: E402
+
+
+@st.cache_data(show_spinner=False)
+def rendered_pages(doc_id: str) -> list[bytes]:
+    """The exact page images that get sent to Document Intelligence.
+
+    Cached because rendering is ~0.2s a page and Streamlit re-runs this whole
+    script every time a slider moves.
+    """
+    import io
+    doc = next(d for d in DOCUMENTS if d["id"] == doc_id)
+    out = []
+    for page in render.pages(doc):
+        buf = io.BytesIO()
+        page.save(buf, format="PNG")
+        out.append(buf.getvalue())
+    return out
+
+
+@st.cache_data(show_spinner=False)
+def rendered_pdf(doc_id: str) -> bytes:
+    doc = next(d for d in DOCUMENTS if d["id"] == doc_id)
+    return render.build_pdf(doc)
 
 IND = "#2E0C69"
 ORG = "#FD600E"
@@ -299,12 +323,13 @@ st.divider()
 
 # ------------------------------------------------------------------ tabs
 tab_names = ["Per document", "Field detail", "How scoring works",
-             "Strategy comparison"]
+             "Strategy comparison", "The documents"]
 if az_res:
     tab_names.append("Mock vs live")
 tabs = st.tabs(tab_names)
 t1, t2, t3, t4 = tabs[0], tabs[1], tabs[2], tabs[3]
-t5 = tabs[4] if az_res else None
+t_docs = tabs[4]
+t5 = tabs[5] if az_res else None
 
 with t1:
     cols = st.columns(5)
@@ -425,6 +450,58 @@ and prevents nothing.
 > Tuning moves who looks at a value.
 > Validation changes whether the value is right.
 """)
+
+with t_docs:
+    st.caption("These are the actual pages sent to Document Intelligence — "
+               "rendered from the same ten documents the mock scores, then "
+               "deliberately degraded. What you see here is exactly what the "
+               "service sees. Nothing else is sent.")
+
+    pick_d = st.selectbox(
+        "Document", [d["id"] for d in DOCUMENTS], key="docs_pick",
+        format_func=lambda x: f"{x} — {render.PROFILES[x]} — "
+        + next(d["note"] for d in DOCUMENTS if d["id"] == x))
+
+    prof = render.PROFILES[pick_d]
+    p = render.PARAMS[prof]
+    left, right = st.columns([3, 2])
+
+    with right:
+        st.markdown(f"**Degradation profile: `{prof}`**")
+        st.dataframe(
+            [{"setting": k, "value": v} for k, v in p.items()],
+            use_container_width=True, hide_index=True)
+        if all(v in (0, 0.0, 1.0) for v in p.values()):
+            st.info("This profile applies **no degradation at all** — the page "
+                    "goes to the service exactly as drawn.")
+        st.download_button("Download this PDF", rendered_pdf(pick_d),
+                           f"{pick_d}.pdf", "application/pdf",
+                           use_container_width=True)
+
+        if AZ:
+            live = next(d for d in AZ if d["id"] == pick_d)
+            mockdoc = next(d for d in DOCUMENTS if d["id"] == pick_d)
+            got, expected = len(live["kv"]), len(mockdoc["kv"])
+            st.markdown("**What the live service made of it**")
+            if got < expected:
+                st.error(f"{got} of {expected} fields came back usable. "
+                         f"The rest were returned with labels the adapter "
+                         f"could not recognise — see the sidebar's unmapped "
+                         f"list. When the service misreads the *label*, the "
+                         f"value is lost even though it was printed clearly.")
+            else:
+                st.success(f"All {got} fields came back and mapped cleanly.")
+            if live["kv"]:
+                confs = [k["confidence"] for k in live["kv"]]
+                st.caption(f"confidence on what it did read — "
+                           f"min {min(confs):.3f}, mean "
+                           f"{sum(confs)/len(confs):.3f}, max {max(confs):.3f}")
+
+    with left:
+        for i, png in enumerate(rendered_pages(pick_d), 1):
+            st.image(png, caption=f"{pick_d} — page {i}",
+                     use_container_width=True)
+
 
 if t5 is not None:
     with t5:
