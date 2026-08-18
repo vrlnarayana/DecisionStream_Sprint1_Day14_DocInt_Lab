@@ -6,6 +6,17 @@ Ten case application forms. Decide what to accept automatically and what to
 send to a human. A flag costs half a minute. A wrongly accepted value costs a
 case.
 
+**▶ Play it now — nothing to install:
+[docint-threshold-demo.streamlit.app](https://docint-threshold-demo.streamlit.app/)**
+
+That hosted board is the fastest way into the game and the one to send a room
+to. It runs the offline mock, which is the whole exercise. The live Document
+Intelligence panel is there too, and it asks for an endpoint and a key —
+credentials are held for your browser session only and are never written to
+disk, so nothing you paste there is stored or shared. If you would rather not
+put a key into a hosted app at all, run it locally instead (option 2 below);
+the game is identical either way.
+
 ---
 
 ## Three ways to play. Pick the one that runs on your laptop.
@@ -61,6 +72,23 @@ which prints measured confidence per document against its target band.
 
 Everything else — `play.py`, the HTML board — stays mock-only. Neither has
 anywhere safe to put a key.
+
+**On the hosted board specifically.** Two things differ from running locally,
+and both only affect the live panel — the mock game is unaffected.
+
+`packages.txt` installs `fonts-dejavu-core`, because `render.py` draws the
+forms with a real TrueType font and deliberately refuses to fall back to
+Pillow's bitmap font — that fallback would wreck the confidence bands
+invisibly. Without that apt package the live panel stops with a
+`FontNotFound` naming the paths it tried. Keep the file if you redeploy.
+
+The response cache under `out/azure/` belongs to the running process, not to
+your browser session, so on a shared hosted app it is shared by everyone using
+it and is wiped whenever the app restarts. Nothing sensitive lives in it — the
+ten documents are synthetic and no credential is ever cached — but it does mean
+someone else's earlier run can serve your "Connect & analyse", and that a
+restart re-bills the next run. For a session where you want the measurement to
+be yours, run locally.
 
 ### 3 · The terminal + `policy.json` — the one that feels like engineering
 
